@@ -13,6 +13,8 @@
 #include "freertos/queue.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include "esp_wifi.h"
+#include "driver/adc.h"
 
 static const uint8_t gfx[]={
 #include "graphics.inc"
@@ -38,26 +40,25 @@ void drawIcon(int px, int py, int o) {
 	}
 }
 
-
 void guiCharging(int almostFull) {
 	kcugui_cls();
 	if (!almostFull) {
-		drawIcon(20, 26, GFX_O_CHG);
+		drawIcon((KC_SCREEN_W-80)/2+20, (KC_SCREEN_H-64)/2+26, GFX_O_CHG);
 	} else {
-		drawIcon(20, 26, GFX_O_CHGNEARFULL);
+		drawIcon((KC_SCREEN_W-80)/2+20, (KC_SCREEN_H-64)/2+26, GFX_O_CHGNEARFULL);
 	}
 	kcugui_flush();
 }
 
 void guiFull() {
 	kcugui_cls();
-	drawIcon(20, 26, GFX_O_FULL);
+	drawIcon((KC_SCREEN_W-80)/2+20, (KC_SCREEN_H-64)/2+26, GFX_O_FULL);
 	kcugui_flush();
 }
 
 void guiBatEmpty() {
 	kcugui_cls();
-	drawIcon(20, 26, GFX_O_EMPTY);
+	drawIcon((KC_SCREEN_W-80)/2+20, (KC_SCREEN_H-64)/2+26, GFX_O_EMPTY);
 	kcugui_flush();
 }
 
@@ -80,23 +81,21 @@ void guiSplash() {
 		UG_SetForecolor(C_WHITE);
 		UG_PutString(0, 0, "WIFI AP");
 		UG_SetForecolor(C_YELLOW);
-		UG_PutString(0, 8, " pkspr");
+		UG_PutString(0, 10, " pkspr");
 		UG_SetForecolor(C_WHITE);
-		UG_PutString(0, 16, "GO TO:");
+		UG_PutString(0, 20, "GO TO:");
 		UG_SetForecolor(C_YELLOW);
-		UG_PutString(0, 24, "HTTP://192.168.4.1/");
+		UG_PutString(0, 30, "HTTP://192.168.4.1/");
 	} else {
 		UG_SetForecolor(C_WHITE);
 		UG_PutString(0, 0, "   NOTE:");
 		UG_SetForecolor(C_YELLOW);
-		UG_PutString(0, 8,  "WiFi is off");
-		UG_PutString(0, 16, "and can be ");
-		UG_PutString(0, 24, "enabled in ");
-		UG_PutString(0, 32, "the options");
-		UG_PutString(0, 40, "menu.      ");
+		UG_PutString(0, 10, "WiFi is off and can");
+		UG_PutString(0, 18, "be enabled in the ");
+		UG_PutString(0, 26, "options menu.      ");
 	}
 	UG_SetForecolor(C_RED);
-	UG_PutString(30, 56, "MENU");
+	UG_PutString((KC_SCREEN_W-30)/2, KC_SCREEN_H-8, "MENU");
 	UG_SetBackcolor(C_BLACK);
 
 	kcugui_flush();
@@ -128,20 +127,20 @@ static void debug_screen() {
 		UG_SetForecolor(C_WHITE);
 		k=kchal_get_keys();
 		sprintf(buf, "KEYS: %X", k);
-		UG_PutString(0, 8, buf);
+		UG_PutString(0, 10, buf);
 		v=kchal_get_chg_status();
 		sprintf(buf, "CHG: %X", v);
-		UG_PutString(0, 16, buf);
+		UG_PutString(0, 18, buf);
 		v=kchal_get_bat_mv();
 		sprintf(buf, "VBATMV:%d", v);
-		UG_PutString(0, 24, buf);
+		UG_PutString(0, 26, buf);
 		sprintf(buf, "ADCCAL:%d", battFullAdcVal);
-		UG_PutString(0, 32, buf);
+		UG_PutString(0, 34, buf);
 		UG_SetForecolor(C_YELLOW);
-		UG_PutString(0, 40, "Gitrev/date");
+		UG_PutString(0, 42, "Gitrev/date");
 		UG_SetForecolor(C_WHITE);
-		UG_PutString(0, 48, GITREV);
-		UG_PutString(0, 56, COMPILEDATE);
+		UG_PutString(0, 50, GITREV);
+		UG_PutString(0, 58, COMPILEDATE);
 		kcugui_flush();
 		vTaskDelay(100/portTICK_RATE_MS);
 		if (k&KC_BTN_SELECT) {
@@ -193,9 +192,9 @@ int option_menu_cb(int button, char **desc, kcugui_menuitem_t **menu, int item_s
 		kchal_set_volume(n);
 	} else if (od->opt_id==OPT_BRIGHT) {
 		int n=kchal_get_brightness();
-		if (button==KC_BTN_LEFT) n-=10; else n+=10;
-		if (n<0) n=0;
-		if (n>255) n=255;
+		if (button==KC_BTN_LEFT) n-=5; else n+=5;
+		if (n<1) n=1;
+		if (n>100) n=100;
 		kchal_set_brightness(n);
 	} else if (od->opt_id==OPT_CHANNEL) {
 		int n=*od->opt_val;
@@ -264,7 +263,11 @@ static void show_options() {
 }
 
 static int fccallback(int button, char **glob, char **desc, void *usrptr) {
-	if (button & KC_BTN_POWER) kchal_power_down();
+	if (button & KC_BTN_POWER) {
+		esp_wifi_stop();
+		adc_power_off();
+		kchal_power_down();
+	}
 	if (button & KC_BTN_START) show_options();
 	if (button & KC_BTN_SELECT) debug_screen();
 	return 0;
@@ -280,9 +283,9 @@ void guiMenu() {
 	while (kchal_get_keys()) vTaskDelay(100/portTICK_RATE_MS);
 	while (!kchal_get_keys()) vTaskDelay(100/portTICK_RATE_MS);
 	int fd=kcugui_filechooser_filter(app_select_filter_fn, "*.app,*.bin", "CHOOSE APP", fccallback, NULL, KCUGUI_FILE_FLAGS_NOEXT);
-	while(kchal_get_keys()); //wait till btn released
+	while(kchal_get_keys()); //wait till btn released	
+	esp_wifi_stop();
+	adc_power_off();
 	kchal_set_new_app(fd);
 	kchal_boot_into_new_app();
 }
-
-

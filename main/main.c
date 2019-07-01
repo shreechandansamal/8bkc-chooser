@@ -91,7 +91,7 @@ HttpdBuiltInUrl builtInUrls[]={
 
 
 //Hack: Call ssd driver directly
-void ssd1331SetBrightness(int ctr);
+void st7735rSetBrightness(int ctr);
 
 void handleCharging() {
 	int r;
@@ -102,7 +102,7 @@ void handleCharging() {
 	int fixFull=0;
 
 	//Force brightness low to decrease chance of burn-in
-	ssd1331SetBrightness(32);
+	st7735rSetBrightness(30);
 	printf("Detected charger.\n");
 	guiInit();
 	guiCharging();
@@ -230,7 +230,8 @@ void handleKeyLock() {
 		oldbtn=btn;
 		vTaskDelay(100/portTICK_RATE_MS);
 	}
-	//No A button pressed in time. Must be spurious.
+	//No A button pressed in time. Must be spurious.	
+	esp_wifi_stop();
 	kchal_power_down();
 }
 
@@ -268,42 +269,58 @@ int app_main(void)
 	delete_temp_files();
 
 	nvs_flash_init();
-	tcpip_adapter_init();
-	ESP_ERROR_CHECK( esp_event_loop_init(event_handler, NULL) );
-	wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-	ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
-	ESP_ERROR_CHECK( esp_wifi_set_storage(WIFI_STORAGE_RAM) );
-	ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_AP) );
-	wifi_config_t ap_config = {
-		.ap = {
-			.ssid = "pkspr",
-			.authmode=WIFI_AUTH_OPEN,
-			.max_connection = 2,
-			.beacon_interval=200
-		}
-	};
-	uint8_t channel=5;
+
+	kchal_sound_mute(1);
+
+	uint8_t wifi_en=1;
 	nvs_handle nvsHandle=NULL;
-	if (nvs_open("8bkc", NVS_READWRITE, &nvsHandle)==ESP_OK) {
-		nvs_get_u8(nvsHandle, "channel", &channel);
+	esp_err_t err=nvs_open("8bkc", NVS_READONLY, &nvsHandle);
+	if (err==ESP_OK) {
+		nvs_get_u8(nvsHandle, "wifi", &wifi_en);
 	}
-	ap_config.ap.channel=channel;
-	ESP_ERROR_CHECK( esp_wifi_set_config(WIFI_IF_AP, &ap_config) );
-	ESP_ERROR_CHECK( esp_wifi_start() );
-//	ESP_ERROR_CHECK( esp_wifi_connect() );
+	nvs_close(nvsHandle);
 
-//	captdnsInit();
+	if(wifi_en) {
+		tcpip_adapter_init();
+		ESP_ERROR_CHECK( esp_event_loop_init(event_handler, NULL) );
+		wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+		ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
+		ESP_ERROR_CHECK( esp_wifi_set_storage(WIFI_STORAGE_RAM) );
+		ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_AP) );
+		wifi_config_t ap_config = {
+			.ap = {
+				.ssid = "pkspr",
+				.authmode=WIFI_AUTH_OPEN,
+				.max_connection = 2,
+				.beacon_interval=200
+			}
+		};
+		uint8_t channel=5;
+		nvs_handle nvsHandle=NULL;
+		if (nvs_open("8bkc", NVS_READWRITE, &nvsHandle)==ESP_OK) {
+			nvs_get_u8(nvsHandle, "channel", &channel);
+		}
+		ap_config.ap.channel=channel;
+		ESP_ERROR_CHECK( esp_wifi_set_config(WIFI_IF_AP, &ap_config) );
 
-	espFsInit((void*)(webpages_espfs_start));
-	httpdInit(builtInUrls, 80);
+		ESP_ERROR_CHECK( esp_wifi_start() );
+	//	ESP_ERROR_CHECK( esp_wifi_connect() );
+
+	//	captdnsInit();
+
+		espFsInit((void*)(webpages_espfs_start));
+		httpdInit(builtInUrls, 80);
+
+		printf("\nReady, AP on channel %d\n", (int)channel);
+	}
+	else {
+		printf("\nWifi AP disabled!");
+	}
 
 	guiInit();
 	guiSplash();
-
-	printf("\nReady, AP on channel %d\n", (int)channel);
 
 	guiMenu();
 
 	return 0;
 }
-
