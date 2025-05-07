@@ -88,11 +88,11 @@ void guiSplash() {
 		UG_PutString(0, 30, "HTTP://192.168.4.1/");
 	} else {
 		UG_SetForecolor(C_WHITE);
-		UG_PutString(0, 0, "   NOTE:");
+		UG_PutString(0, 0, "NOTE:");
 		UG_SetForecolor(C_YELLOW);
-		UG_PutString(0, 10, "WiFi is off and can");
-		UG_PutString(0, 18, "be enabled in the ");
-		UG_PutString(0, 26, "options menu.      ");
+		UG_PutString(0, 10, "WiFi is off and ");
+		UG_PutString(0, 18, "can be enabled in ");
+		UG_PutString(0, 26, "the options menu.  ");
 	}
 	UG_SetForecolor(C_RED);
 	UG_PutString((KC_SCREEN_W-30)/2, KC_SCREEN_H-8, "MENU");
